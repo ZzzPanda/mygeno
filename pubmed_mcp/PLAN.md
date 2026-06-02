@@ -17,10 +17,10 @@
 | 部署 | docker-compose | mcp + minio (+ minio-init bucket 引导) |
 | 网络 | 直连 Sci-Hub；保留 `HTTP_PROXY` / `HTTPS_PROXY` 环境变量入口 |
 
-**待你最终拍板的小项**（不阻塞先动手，有默认值）：
+**已确认**：
 
-1. 对外要暴露的工具集合 —— 默认实现 `download_pmid` / `download_pmids` / `get_pdf_uri` / `list_downloaded`；`presign_url` 为可选第二阶段。
-2. compose 是否带 `minio-init` 服务做 bucket 自举 —— 默认带（避免每次部署都要进 web UI 手点）。
+1. 工具集合：`download_pmid` / `download_pmids` / `get_pdf_uri` / `list_downloaded`（`presign_url` 留作后续）。
+2. compose 带 `minio-init` 服务做 bucket 自举。
 
 ---
 
