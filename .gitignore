@@ -1,0 +1,52 @@
+# Secrets / local env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Rust
+target/
+**/*.rs.bk
+*.pdb
+
+# SQLite (runtime data)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Downloaded artifacts (local dev outside Docker volume)
+pubmed_mcp/data/
+pubmed_mcp/*.pdf
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Editors / IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs / crash dumps
+*.log
+logs/
+core
+core.*
+
+# Python (skills/ scripts use these locally)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Misc
+.cache/
+.tmp/
