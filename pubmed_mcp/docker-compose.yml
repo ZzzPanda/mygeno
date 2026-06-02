@@ -1,0 +1,58 @@
+services:
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minio}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minio12345}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${S3_ACCESS_KEY:-minio} ${S3_SECRET_KEY:-minio12345} &&
+      mc mb -p local/${S3_BUCKET:-pmid-pdfs} || true &&
+      echo 'bucket ready: ${S3_BUCKET:-pmid-pdfs}'
+      "
+
+  pmid_downloader:
+    build: .
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      MCP_BIND: 0.0.0.0:8080
+      MCP_PATH: /mcp
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: ${S3_BUCKET:-pmid-pdfs}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minio}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-minio12345}
+      S3_FORCE_PATH_STYLE: "true"
+      SQLITE_PATH: /data/meta.db
+      SCIHUB_MIRRORS: ${SCIHUB_MIRRORS:-sci-hub.ru,sci-hub.st,sci-hub.se}
+      HUMAN_DELAY: ${HUMAN_DELAY:-true}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      RUST_LOG: ${RUST_LOG:-info,pmid_downloader=debug}
+    volumes:
+      - mcp-data:/data
+    ports:
+      - "8080:8080"
+
+volumes:
+  minio-data:
+  mcp-data:
