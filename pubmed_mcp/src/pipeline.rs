@@ -6,12 +6,12 @@ use std::{
 use rand::Rng;
 use reqwest::Client;
 use sha2::{Digest, Sha256};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::{
     config::Config,
     db::{Db, DownloadRow},
-    pubmed, scihub,
+    findit, pmc, pubmed, scihub,
     storage::Storage,
 };
 
@@ -58,49 +58,103 @@ impl Pipeline {
             };
         }
 
-        let doi = match pubmed::fetch_doi(&self.http, &pmid).await {
-            Ok(Some(d)) => d,
-            Ok(None) => {
-                return DownloadOutcome {
-                    pmid,
-                    doi: None,
-                    uri: None,
-                    size_bytes: None,
-                    status: "no_doi".into(),
-                    error: Some("PubMed has no DOI for this PMID".into()),
+        // Try FindIt first (open-access publishers + PMC). Captures DOI as a side effect.
+        let mut doi: Option<String> = None;
+        let mut findit_err: Option<String> = None;
+        let findit_hit = if self.cfg.findit_url.is_some() {
+            match findit::fetch_pdf(&self.http, &self.cfg, &pmid).await {
+                Ok(hit) => {
+                    info!(%pmid, source = %hit.source, "got PDF from FindIt");
+                    if let Some(d) = &hit.doi {
+                        doi = Some(d.clone());
+                    }
+                    Some((hit.bytes, hit.source))
+                }
+                Err(e) => {
+                    debug!(%pmid, error = %e, "FindIt unavailable, falling back");
+                    findit_err = Some(e.to_string());
+                    None
                 }
             }
-            Err(e) => {
-                warn!(error = %e, "pubmed query failed");
-                return DownloadOutcome {
-                    pmid,
-                    doi: None,
-                    uri: None,
-                    size_bytes: None,
-                    status: "error".into(),
-                    error: Some(format!("PubMed: {e}")),
-                };
+        } else {
+            None
+        };
+
+        let (bytes, source) = if let Some(hit) = findit_hit {
+            hit
+        } else {
+            match pmc::fetch_pdf(&self.http, &self.cfg, &pmid).await {
+                Ok(hit) => {
+                    info!(%pmid, source = %hit.source, "got PDF from Europe PMC");
+                    (hit.bytes, hit.source)
+                }
+                Err(e) => {
+                    debug!(%pmid, error = %e, "PMC unavailable, falling back to Sci-Hub");
+                    if doi.is_none() {
+                        match pubmed::fetch_doi(&self.http, &pmid).await {
+                            Ok(Some(d)) => doi = Some(d),
+                            Ok(None) => {
+                                let mut err = String::from("no DOI; ");
+                                if let Some(fe) = &findit_err {
+                                    err.push_str(&format!("findit: {fe}; "));
+                                }
+                                err.push_str(&format!("pmc: {e}"));
+                                return DownloadOutcome {
+                                    pmid,
+                                    doi: None,
+                                    uri: None,
+                                    size_bytes: None,
+                                    status: "no_doi".into(),
+                                    error: Some(err),
+                                };
+                            }
+                            Err(e) => {
+                                warn!(error = %e, "pubmed query failed");
+                                return DownloadOutcome {
+                                    pmid,
+                                    doi: None,
+                                    uri: None,
+                                    size_bytes: None,
+                                    status: "error".into(),
+                                    error: Some(format!("PubMed: {e}")),
+                                };
+                            }
+                        }
+                    }
+                    let doi_val = doi.clone().unwrap();
+                    match scihub::fetch_pdf(&self.http, &self.cfg, &doi_val).await {
+                        Ok(hit) => (hit.bytes, format!("scihub:{}", hit.mirror)),
+                        Err(sh_err) => {
+                            let mut err = String::new();
+                            if let Some(fe) = &findit_err {
+                                err.push_str(&format!("findit: {fe}; "));
+                            }
+                            err.push_str(&format!("pmc: {e}; scihub: {sh_err}"));
+                            return DownloadOutcome {
+                                pmid,
+                                doi: Some(doi_val),
+                                uri: None,
+                                size_bytes: None,
+                                status: "not_found".into(),
+                                error: Some(err),
+                            };
+                        }
+                    }
+                }
             }
         };
 
-        let hit = match scihub::fetch_pdf(&self.http, &self.cfg, &doi).await {
-            Ok(h) => h,
-            Err(e) => {
-                return DownloadOutcome {
-                    pmid,
-                    doi: Some(doi),
-                    uri: None,
-                    size_bytes: None,
-                    status: "not_found".into(),
-                    error: Some(e.to_string()),
-                };
+        // Backfill DOI if Sci-Hub path wasn't taken and FindIt didn't supply one.
+        if doi.is_none() {
+            if let Ok(Some(d)) = pubmed::fetch_doi(&self.http, &pmid).await {
+                doi = Some(d);
             }
-        };
+        }
 
-        if let Err(msg) = scihub::validate_pdf(&hit.bytes) {
+        if let Err(msg) = scihub::validate_pdf(&bytes) {
             return DownloadOutcome {
                 pmid,
-                doi: Some(doi),
+                doi,
                 uri: None,
                 size_bytes: None,
                 status: "invalid_pdf".into(),
@@ -109,10 +163,10 @@ impl Pipeline {
         }
 
         let key = format!("PubMed{pmid}.pdf");
-        if let Err(e) = self.storage.put(&key, hit.bytes.clone()).await {
+        if let Err(e) = self.storage.put(&key, bytes.clone()).await {
             return DownloadOutcome {
                 pmid,
-                doi: Some(doi),
+                doi,
                 uri: None,
                 size_bytes: None,
                 status: "error".into(),
@@ -121,17 +175,17 @@ impl Pipeline {
         }
 
         let mut hasher = Sha256::new();
-        hasher.update(&hit.bytes);
+        hasher.update(&bytes);
         let sha256 = hex::encode(hasher.finalize());
 
         let row = DownloadRow {
             pmid: pmid.clone(),
-            doi: doi.clone(),
+            doi: doi.clone().unwrap_or_default(),
             object_key: key.clone(),
             bucket: self.storage.bucket().to_string(),
-            size_bytes: hit.bytes.len() as i64,
+            size_bytes: bytes.len() as i64,
             sha256,
-            source_mirror: hit.mirror,
+            source_mirror: source,
             downloaded_at: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map(|d| d.as_secs() as i64)
@@ -141,10 +195,10 @@ impl Pipeline {
             warn!(error = %e, "db insert failed (object already in S3)");
         }
 
-        info!(%pmid, %doi, size = row.size_bytes, "downloaded");
+        info!(%pmid, doi = ?doi, size = row.size_bytes, source = %row.source_mirror, "downloaded");
         DownloadOutcome {
             pmid,
-            doi: Some(doi),
+            doi,
             uri: Some(self.storage.uri_for(&key)),
             size_bytes: Some(row.size_bytes),
             status: "downloaded".into(),

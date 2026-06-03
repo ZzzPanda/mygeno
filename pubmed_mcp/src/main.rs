@@ -9,8 +9,10 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod config;
 mod db;
+mod findit;
 mod http_client;
 mod pipeline;
+mod pmc;
 mod pubmed;
 mod scihub;
 mod server;

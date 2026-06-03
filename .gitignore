@@ -50,3 +50,6 @@ venv/
 # Misc
 .cache/
 .tmp/
+
+# Claude Code local config
+.claude/

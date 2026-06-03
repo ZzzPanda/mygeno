@@ -12,7 +12,6 @@ use crate::config::Config;
 pub struct PdfHit {
     pub bytes: Vec<u8>,
     pub mirror: String,
-    pub source_url: String,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -91,7 +90,6 @@ async fn try_mirror(
             return Ok(PdfHit {
                 bytes: bytes.to_vec(),
                 mirror: mirror.to_string(),
-                source_url: scihub_url,
             });
         }
 
@@ -132,7 +130,6 @@ async fn try_mirror(
             return Ok(PdfHit {
                 bytes: pdf_bytes.to_vec(),
                 mirror: mirror.to_string(),
-                source_url: pdf_url,
             });
         }
         debug!(%pdf_url, len = pdf_bytes.len(), "non-pdf payload");
@@ -177,7 +174,15 @@ fn is_captcha_or_blocked(html: &str) -> bool {
         }
     }
     let lower = body.to_lowercase();
-    for kw in ["recaptcha", "cf-captcha", "ddos protection"] {
+    for kw in [
+        "recaptcha",
+        "cf-captcha",
+        "ddos protection",
+        "altcha-widget",
+        "/captcha/challenge/",
+        "are you are robot",
+        "вы робот",
+    ] {
         if lower.contains(kw) {
             return true;
         }

@@ -48,6 +48,7 @@ pub struct PdfRecord {
 #[derive(Clone)]
 pub struct PmidServer {
     pipeline: Pipeline,
+    #[allow(dead_code)] // used by rmcp's #[tool_handler] macro
     tool_router: ToolRouter<PmidServer>,
 }
 

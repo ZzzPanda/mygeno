@@ -28,11 +28,33 @@ services:
       echo 'bucket ready: ${S3_BUCKET:-pmid-pdfs}'
       "
 
+  findit:
+    build: ../pubmed_server
+    environment:
+      METAPUB_CACHE_DIR: /cache
+      FINDIT_VERIFY: ${FINDIT_VERIFY:-false}
+      FINDIT_USE_NIH: ${FINDIT_USE_NIH:-true}
+      FINDIT_REQUEST_TIMEOUT: ${FINDIT_REQUEST_TIMEOUT:-15}
+      NCBI_API_KEY: ${NCBI_API_KEY:-}
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+    volumes:
+      - findit-cache:/cache
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
   pmid_downloader:
     build: .
     depends_on:
       minio-init:
         condition: service_completed_successfully
+      findit:
+        condition: service_healthy
     environment:
       MCP_BIND: 0.0.0.0:8080
       MCP_PATH: /mcp
@@ -43,6 +65,8 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:-minio12345}
       S3_FORCE_PATH_STYLE: "true"
       SQLITE_PATH: /data/meta.db
+      FINDIT_URL: http://findit:8000
+      FINDIT_TIMEOUT_SECS: ${FINDIT_TIMEOUT_SECS:-30}
       SCIHUB_MIRRORS: ${SCIHUB_MIRRORS:-sci-hub.ru,sci-hub.st,sci-hub.se}
       HUMAN_DELAY: ${HUMAN_DELAY:-true}
       HTTP_PROXY: ${HTTP_PROXY:-}
@@ -56,3 +80,4 @@ services:
 volumes:
   minio-data:
   mcp-data:
+  findit-cache:

@@ -1,0 +1,63 @@
+name-template: "pubmed_mcp v$RESOLVED_VERSION"
+tag-template: "pubmed_mcp-v$RESOLVED_VERSION"
+include-paths:
+  - pubmed_mcp
+
+categories:
+  - title: "🚀 Features"
+    labels:
+      - "feature"
+      - "enhancement"
+  - title: "🐛 Bug Fixes"
+    labels:
+      - "fix"
+      - "bug"
+  - title: "🧹 Maintenance"
+    labels:
+      - "chore"
+      - "refactor"
+      - "ci"
+      - "deps"
+  - title: "📝 Documentation"
+    labels:
+      - "docs"
+
+change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
+change-title-escapes: '\<*_&'
+
+version-resolver:
+  major:
+    labels:
+      - "major"
+  minor:
+    labels:
+      - "minor"
+      - "feature"
+  patch:
+    labels:
+      - "patch"
+      - "fix"
+      - "chore"
+      - "docs"
+  default: patch
+
+autolabeler:
+  - label: "feature"
+    title:
+      - '/^feat(\(.+\))?:/i'
+  - label: "fix"
+    title:
+      - '/^fix(\(.+\))?:/i'
+  - label: "chore"
+    title:
+      - '/^(chore|refactor|ci|build|deps)(\(.+\))?:/i'
+  - label: "docs"
+    title:
+      - '/^docs(\(.+\))?:/i'
+
+template: |
+  ## What's Changed
+
+  $CHANGES
+
+  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...pubmed_mcp-v$RESOLVED_VERSION

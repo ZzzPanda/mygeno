@@ -19,6 +19,9 @@ pub struct Config {
     pub download_timeout: Duration,
     pub human_delay: bool,
 
+    pub findit_url: Option<String>,
+    pub findit_timeout: Duration,
+
     pub http_proxy: Option<String>,
     pub https_proxy: Option<String>,
 }
@@ -62,6 +65,17 @@ impl Config {
             human_delay: env::var("HUMAN_DELAY")
                 .map(|v| v != "false" && v != "0")
                 .unwrap_or(true),
+
+            findit_url: env::var("FINDIT_URL")
+                .ok()
+                .map(|s| s.trim_end_matches('/').to_string())
+                .filter(|s| !s.is_empty()),
+            findit_timeout: Duration::from_secs(
+                env::var("FINDIT_TIMEOUT_SECS")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(30),
+            ),
 
             http_proxy: env::var("HTTP_PROXY").ok().filter(|s| !s.is_empty()),
             https_proxy: env::var("HTTPS_PROXY").ok().filter(|s| !s.is_empty()),
