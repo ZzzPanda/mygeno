@@ -1,0 +1,81 @@
+---
+name: pubmed-extractor
+description: Extract gene variant-specific information from PubMed articles. Only extracts info about the queried variant. Uses NCBI E-utilities and Europe PMC APIs with stable, pre-written Python script.
+---
+
+# PubMed Variant Extractor
+
+从PubMed/PMC文献中**仅针对目标变异**提取相应信息。
+
+## 使用方法
+
+```
+/pubmed-extractor PMID1 PMID2 PMID3...
+```
+
+示例：
+```
+/pubmed-extractor 32193832 34556729 --gene BCKDHA --variant "c.565C>T (p.Arg189Cys)"
+```
+
+## 工作流程
+
+1. **NCBI E-utilities API** → 获取PubMed XML格式摘要
+2. **Europe PMC Full-text API** → 尝试获取开放获取全文
+3. **PubMed Central (PMC) API** → 尝试获取PMC全文XML
+4. 请求间随机等待10-40秒，每15次请求额外暂停1分钟
+5. 同一网站每日访问上限500次，超限自动停止并警告
+6. 输出结构化JSON + 控制台摘要 + 每篇一句话概括
+
+## 核心原则：仅提取目标变异相关信息
+
+脚本会先找出文献中所有提及**目标变异**的句子，然后**仅从这些句子中**提取以下信息，不涉及文献中其他变异：
+
+| 字段 | 说明 |
+|------|------|
+| PMID | PubMed ID |
+| 一句话概括 | 聚焦目标变异的文献总结 |
+| 目标变异是否提及 | 文献是否提及该变异（true/false） |
+| 基因 | 目标基因名称 |
+| 变异类型 | missense/nonsense/splice/frameshift等（仅针对目标变异） |
+| cDNA改变 | 如 c.565C>T |
+| 蛋白质改变 | 如 p.Arg189Cys |
+| 致病性 | 仅针对目标变异的致病性评级 |
+| 遗传方式 | 该变异在患者中是杂合/纯合/复合杂合 |
+| 患者详情 | **仅携带目标变异**的患者个体信息（编号、年龄、性别、表型、基因型） |
+| 临床表型 | 目标变异相关的疾病/症状 |
+| 遗传模式 | 常显/常隐等 |
+| 功能验证 | 是否对**该变异**进行了功能实验（体外表达、酶活性、结构建模等） |
+| 功能验证详情 | 描述该变异功能验证的原文句子 |
+| 原文相关句 | 文献中直接提及该变异的所有句子 |
+
+## 速率限制策略
+
+脚本内置三层速率保护：
+
+| 策略 | 说明 |
+|------|------|
+| 随机间隔 | 每次请求间随机等待 10-40 秒 |
+| 周期性长暂停 | 每累计 15 次请求，额外暂停 60 秒 |
+| 站点日上限 | 同一网站（如 eutils.ncbi.nlm.nih.gov）当天访问超过 500 次时，输出警告并自动停止。计数保存在本地 `.site_counts_{日期}.json` 文件中，跨会话持久化 |
+
+## 执行指令
+
+**脚本路径固定，每次直接运行：**
+
+```bash
+python scripts/pubmed_extractor.py --pmids PMID1 PMID2 ... --gene GENE --variant "c.NNN X>Y (p.AA)"
+```
+
+脚本特性：
+- 纯Python标准库，零依赖
+- Windows UTF-8编码兼容
+- 输入PMID自动去重
+- 结果输出到当前目录 `pubmed_variant_results.json`
+- **速率限制**：随机间隔10-40秒 + 每15次请求额外暂停1分钟 + 同站点每日500次上限（自动停止）
+
+## 注意事项
+
+- 非开放获取文献仅能获取摘要
+- 如文献未提及目标变异，会明确标注"未提及"
+- 患者详情依赖文献是否包含个体患者描述
