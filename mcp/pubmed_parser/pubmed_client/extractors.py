@@ -18,7 +18,7 @@ def extract_pathogenicity(sentences, full_text_lower):
         ("可能致病 (likely pathogenic)", r'likely\s+pathogenic'),
         ("良性 (benign)", r'\bbenign\b'),
         ("可能良性 (likely benign)", r'likely\s+benign'),
-        ("意义不明 (VUS)", r'variant\s+of\s+uncertain\s+significance|\bVUS\b'),
+        ("意义不明 (VUS)", r'variant\s+of\s+uncertain\s+significance|\bvus\b'),
         ("有害 (damaging)", r'\bdamaging\b'),
         ("有害 (deleterious)", r'\bdeleterious\b'),
         ("致病 (disease-causing)", r'disease.?causing'),
@@ -28,10 +28,10 @@ def extract_pathogenicity(sentences, full_text_lower):
             path_terms.append(term)
     if not path_terms:
         for term, pattern in pathogenicity_map:
-            m = re.search(pattern, full_text_lower)
+            m = re.search(pattern, vs_lower)
             if m:
                 pos = m.start()
-                context = full_text_lower[max(0, pos - 300):pos + 300]
+                context = vs_lower[max(0, pos - 300):pos + 300]
                 if re.search(r'\bc[\.<]|p\.', context):
                     path_terms.append(term)
     return ", ".join(path_terms) if path_terms else "未指明"
@@ -121,24 +121,29 @@ def extract_zygosity(sentences, full_text_lower, target_cdna="", target_protein=
                     score -= 50  # 大幅降权
                 if re.search(r'in\s+trans\b', s_lower) and z_name.startswith("复合杂合"):
                     score += 50  # 大幅加权
+                # 如果同时有"纯合"和"in trans"，改为大幅加权复合杂合（而非降权纯合）
+                if re.search(r'in\s+trans\b', s_lower) and z_name.startswith("纯合"):
+                    score += 50  # in trans 否定纯合，应提升复合杂合优先级
                 scored_matches.append((z_name, score, s, m.start()))
                 break  # 每句只取第一个匹配的合子关键词
 
     # ---- 第2层：表格级别匹配（高权重） ----
     table_zygosity = None
-    if tables and keywords:
+    if tables:
         for table_info in tables:
             for ri, row in enumerate(table_info["rows"]):
                 row_text = "\t".join(str(cell or "") for cell in row)
                 row_lower = row_text.lower()
-                # 该行是否包含目标变异
+                # 该行是否包含目标变异（仅当keywords可用时检查）
                 has_target = False
-                for kw in keywords.get("all", []):
-                    if kw.lower() in row_lower:
-                        has_target = True
-                        break
-                if not has_target:
-                    continue
+                if keywords:
+                    for kw in keywords.get("all", []):
+                        if kw.lower() in row_lower:
+                            has_target = True
+                            break
+                    # 如果keywords存在但没有匹配，则跳过该行
+                    if not has_target:
+                        continue
                 # 从该行提取合子状态
                 for cell in row:
                     cell_text = str(cell or "").strip().lower()

@@ -1,0 +1,51 @@
+/**
+ * cases/extract_pathogenicity_cases.json
+ *
+ * 用途：记录 extract_pathogenicity() 函数的测试用例（供人类阅读）。
+ *
+ * 函数签名：
+ *   extract_pathogenicity(sentences: list[str], full_text_lower: str) -> str
+ *
+ * 返回值类型（中文）：
+ *   致病 (pathogenic) | 可能致病 (likely pathogenic) | 良性 (benign)
+ *   可能良性 (likely benign) | 意义不明 (VUS) | 有害 (damaging/deleterious)
+ *
+ * 策略说明：
+ *   优先从 sentences（变异相关句子）中匹配关键词；
+ *   若未匹配到，则 fallback 到 full_text_lower 中搜索。
+ *
+ * 如何运行这些用例：
+ *   # 在 test_extractors.py 的 TestExtractPathogenicityFromCases 类中（目前为 informational）
+ */
+
+[
+  {
+    "description": "sentences 中直接包含 'pathogenic' → 匹配成功",
+    "input": {
+      "sentences": ["This variant is pathogenic."],
+      "full_text_lower": "this variant is pathogenic."
+    },
+    //期望结果包含 "pathogenic"（不区分大小写）
+    "expected_contains": "pathogenic"
+  },
+
+  {
+    "description": "sentences 中包含 'VUS' → 匹配成功（意义不明）",
+    "input": {
+      "sentences": ["The variant is a VUS."],
+      "full_text_lower": "the variant is a vus."
+    },
+    // 期望结果包含 "VUS" 或 "不确定"
+    "expected_contains": "VUS"
+  },
+
+  {
+    "description": "sentences 为空时 → fallback 到 full_text_lower搜索",
+    "input": {
+      "sentences": [],
+      "full_text_lower": "no variant mentioned here but this variant isvus in the text."
+    },
+    // 期望 fallback 能找到 VUS，结果非空
+    "expected_not_empty": true
+  }
+]

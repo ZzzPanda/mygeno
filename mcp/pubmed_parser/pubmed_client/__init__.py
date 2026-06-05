@@ -28,16 +28,6 @@ from .xml_parser import (
     KNOWN_VARIANT_NAMES,
 )
 
-from .network import (
-    safe_request,
-    fetch_ncbi_abstract,
-    fetch_europe_pmc_fulltext,
-    fetch_pmc_fulltext,
-    fetch_europe_pmc_text,
-    fetch_pmc_html,
-    fetch_ncbi_gene_info,
-)
-
 from .xml_parser import (
     _empty_result,
     parse_ncbi_xml,
@@ -84,7 +74,10 @@ from .summarizer import (
     _generate_excel_csv,
 )
 
-from .cli import main
+from .pdf import (
+    extract_text_from_pdf,
+    extract_tables_from_pdf,
+)
 
 # Public API
 __all__ = [
@@ -102,14 +95,6 @@ __all__ = [
     "EXTRA_PAUSE_SECS",
     "MIN_DELAY",
     "MAX_DELAY",
-    # Network functions
-    "fetch_ncbi_abstract",
-    "fetch_europe_pmc_fulltext",
-    "fetch_pmc_fulltext",
-    "fetch_europe_pmc_text",
-    "fetch_pmc_html",
-    "fetch_ncbi_gene_info",
-    "safe_request",
     # Site count/delay functions
     "random_sleep",
     "periodic_long_pause",
@@ -140,12 +125,13 @@ __all__ = [
     "extract_patient_count",
     "extract_variant_features",
     "extract_info_for_variant",
+    # PDF extraction functions
+    "extract_text_from_pdf",
+    "extract_tables_from_pdf",
     # Summary generation
     "generate_summary_paragraph",
     "generate_one_sentence_summary",
     "_generate_excel_csv",
-    # Main
-    "main",
     # Internal helpers (included as requested)
     "_empty_result",
     "_get_state_file",

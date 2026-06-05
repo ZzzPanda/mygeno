@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PubMed Parser MCP Server
-使用 FastMCP 框架提供 PubMed 文献查询和变异信息提取服务。
+使用 FastMCP 框架提供 PDF 文献解析和变异信息提取服务。
 
 Usage:
   python server.py
@@ -10,14 +10,12 @@ Usage:
 
 from fastmcp import FastMCP
 
+import pymupdf
+
 # 导入 pubmed_client 核心功能
 from pubmed_client import (
-    fetch_ncbi_abstract,
-    fetch_europe_pmc_fulltext,
-    fetch_europe_pmc_text,
-    fetch_pmc_fulltext,
-    parse_ncbi_xml,
-    parse_pmc_europe_xml,
+    extract_text_from_pdf,
+    extract_tables_from_pdf,
     build_variant_keywords,
     find_variant_sentences,
     split_sentences,
@@ -27,175 +25,250 @@ from pubmed_client import (
     extract_patient_phenotypes,
     extract_clinical_details,
     extract_co_variants,
+    extract_phase_evidence,
+    extract_patient_count,
     infer_variant_type,
-    expand_protein_keywords,
 )
 
 # 创建 FastMCP 服务器实例
 mcp = FastMCP("PubMed Parser")
 
-# ── 工具函数 ──────────────────────────────────────────────────────────────────
 
+def _build_result_dict(pdf_path, title, gene, cdna, protein, transcript,
+                       full_text, tables, variant_sentences, matched_kws,
+                       table_rows, table_count):
+    """构建符合 target 格式的结果字典。"""
+    full_text_lower = full_text.lower()
+    keywords = build_variant_keywords(cdna, protein, transcript)
 
-@mcp.tool()
-def search_pubmed_by_pmid(pmids: list[str]) -> list[dict]:
-    """
-    根据 PMID 列表获取 PubMed 文章摘要信息。
+    # 变异类型
+    variant_type = infer_variant_type(cdna, protein, variant_sentences)
 
-    Args:
-        pmids: PubMed ID 列表，如 ["12345678", "23456789"]
+    # 致病性
+    pathogenicity = extract_pathogenicity(variant_sentences, full_text_lower)
 
-    Returns:
-        文章信息列表，包含标题、摘要、作者、期刊、年份等
-    """
-    results = []
-    for pmid in pmids:
-        pmid = pmid.strip()
-        if not pmid:
-            continue
+    # 合子状态（传入tables和keywords）
+    zygosity = extract_zygosity(
+        variant_sentences,
+        full_text_lower,
+        target_cdna=cdna,
+        target_protein=protein,
+        tables=tables,
+        keywords=keywords,
+    )
 
-        # 尝试多种数据源
-        xml_text = fetch_ncbi_abstract(pmid)
-        if xml_text:
-            result = parse_ncbi_xml(xml_text)
-            if result and result.get("PMID"):
-                results.append(result)
-                continue
+    # 遗传模式
+    inheritance = extract_inheritance(variant_sentences, full_text_lower)
 
-        # Europe PMC fallback
-        europe_data = fetch_europe_pmc_text(pmid)
-        if europe_data:
-            results.append({
-                "PMID": pmid,
-                "标题": europe_data.get("title", ""),
-                "摘要": europe_data.get("abstract", ""),
-                "作者": europe_data.get("authors", []),
-                "期刊": europe_data.get("journal", ""),
-                "发表年份": europe_data.get("year", ""),
-                "全文来源": "europe_pmc",
-            })
-            continue
+    # 临床表型
+    phenotypes = extract_patient_phenotypes(variant_sentences, tables, keywords)
+    phenotype_str = "、".join(phenotypes) if phenotypes else ""
 
-        results.append({"PMID": pmid, "错误": "未找到文章"})
+    # 临床详情
+    clinical_details = extract_clinical_details(variant_sentences, tables, keywords)
 
-    return results
+    # 相位信息
+    co_variants = extract_co_variants(
+        variant_sentences,
+        tables=tables,
+        target_cdna=cdna,
+        target_protein=protein,
+        variant_keywords=keywords,
+    )
+    phase_result, _ = extract_phase_evidence(variant_sentences, co_variants, zygosity)
 
+    # 患者数量
+    patient_count = extract_patient_count(variant_sentences, tables, keywords, cdna)
 
-@mcp.tool()
-def get_fulltext_by_pmid(pmid: str) -> dict:
-    """
-    获取 PubMed 文章的全文内容（优先 PMC 开放获取全文）。
+    # 提取PMID从文件名
+    pmid = ""
+    if pdf_path:
+        import re
+        m = re.search(r'PMID:(\d+)', pdf_path)
+        if m:
+            pmid = m.group(1)
 
-    Args:
-        pmid: PubMed ID
-
-    Returns:
-        包含全文内容的字典，包含 '全文'、'全文来源' 等字段
-    """
-    # 优先尝试 PMC 全文
-    xml_text = fetch_pmc_fulltext(pmid)
-    if xml_text:
-        result = parse_pmc_europe_xml(xml_text, {"PMID": pmid})
-        if result.get("全文"):
-            return result
-
-    # Europe PMC 全文 fallback
-    xml_text = fetch_europe_pmc_fulltext(pmid)
-    if xml_text:
-        result = parse_pmc_europe_xml(xml_text, {"PMID": pmid})
-        if result.get("全文"):
-            return result
-
-    # 最终尝试 NCBI 摘要
-    xml_text = fetch_ncbi_abstract(pmid)
-    if xml_text:
-        result = parse_ncbi_xml(xml_text)
-        if result and result.get("PMID"):
-            return result
-
-    return {"PMID": pmid, "错误": "无法获取全文", "全文": "", "全文来源": "none"}
+    return {
+        "PMID": pmid,
+        "文件": pdf_path.split("/")[-1] if pdf_path else "",
+        "标题": title,
+        "基因": gene.upper() if gene else "",
+        "cDNA变异": cdna,
+        "蛋白变异": protein,
+        "变异提及": bool(variant_sentences),
+        "匹配关键词": matched_kws,
+        "正文匹配句": variant_sentences[:20],
+        "表格匹配行": table_rows[:20],
+        "患者数量": patient_count,
+        "变异类型": variant_type,
+        "致病性": pathogenicity,
+        "合子状态": zygosity,
+        "临床表型": phenotype_str,
+        "相位状态": phase_result.get("phase_status", ""),
+        "相位置信度": phase_result.get("phase_confidence", ""),
+        "表格数量": table_count,
+    }
 
 
 @mcp.tool()
 def extract_variant_info(
-    pmid: str,
+    pdf_path: str,
     cdna: str = "",
     protein: str = "",
     gene: str = "",
     transcript: str = "",
 ) -> dict:
     """
-    从 PubMed 文章中提取目标变异的信息。
+    从 PDF 文件中提取目标变异的信息。
 
     Args:
-        pmid: PubMed ID
-        cdna: cDNA 变异，如 "c.1166G>A"
-        protein: 蛋白变异，如 "p.R389H" 或 "R389H"
-        gene: 基因符号，如 "ABCG5"
-        transcript: 转录本 ID，如 "NM_022436.3"
+        pdf_path: PDF 文件路径（如 "/Users/roger/Documents/GitHub/mygeno/data/pdf/PMID:33374015.pdf"）
+        cdna: cDNA 变异，如 "c.2279C>T"
+        protein: 蛋白变异，如 "p.Thr760Met" 或 "Thr760Met"
+        gene: 基因符号，如 "CFTR"
+        transcript: 转录本 ID，如 "NM_000492.4"
 
     Returns:
         变异信息字典，包含匹配句子、致病性、遗传方式、患者表型等
     """
-    # 获取全文
-    xml_text = fetch_pmc_fulltext(pmid)
-    result = {}
-    if xml_text:
-        result = parse_pmc_europe_xml(xml_text, {"PMID": pmid})
+    # 1. 提取文本
+    try:
+        full_text = extract_text_from_pdf(pdf_path)
+    except Exception as e:
+        return {"错误": f"无法读取 PDF: {e}"}
 
-    if not result.get("全文"):
-        xml_text = fetch_europe_pmc_fulltext(pmid)
-        if xml_text:
-            result = parse_pmc_europe_xml(xml_text, {"PMID": pmid})
+    if not full_text:
+        return {"错误": "PDF 内容为空"}
 
-    if not result.get("全文"):
-        xml_text = fetch_ncbi_abstract(pmid)
-        if xml_text:
-            result = parse_ncbi_xml(xml_text)
+    # 2. 提取表格
+    tables = extract_tables_from_pdf(pdf_path)
 
-    if not result or not result.get("全文"):
-        return {"PMID": pmid, "错误": "无法获取文章内容"}
+    # 3. 构建关键词
+    keywords = build_variant_keywords(cdna, protein, transcript)
+
+    # 4. 查找变异提及句子
+    variant_sentences, matched_kws = find_variant_sentences(full_text, keywords)
+
+    # 5. 收集表格中包含变异的行
+    table_rows = []
+    for table_info in tables:
+        for row in table_info["rows"]:
+            row_text = "\t".join(str(cell or "") for cell in row)
+            row_lower = row_text.lower()
+            for kw in keywords.get("all", []):
+                if kw.lower() in row_lower:
+                    table_rows.append(row)
+                    break
+
+    # 6. 提取标题（从 PDF 元数据或第一行）
+    title = ""
+    try:
+        import pymupdf
+        with pymupdf.open(pdf_path) as doc:
+            metadata = doc.metadata
+            if metadata.get("title"):
+                title = metadata["title"]
+    except Exception:
+        pass
+    if not title and variant_sentences:
+        # 尝试从第一句话提取
+        title = variant_sentences[0][:200] if variant_sentences else ""
+
+    # 7. 构建结果
+    return _build_result_dict(
+        pdf_path=pdf_path,
+        title=title,
+        gene=gene,
+        cdna=cdna,
+        protein=protein,
+        transcript=transcript,
+        full_text=full_text,
+        tables=tables,
+        variant_sentences=variant_sentences,
+        matched_kws=matched_kws,
+        table_rows=table_rows,
+        table_count=len(tables),
+    )
+
+
+@mcp.tool()
+def parse_pdf(pdf_path: str) -> dict:
+    """
+    解析 PDF 文件，提取文本和表格。
+
+    Args:
+        pdf_path: PDF 文件路径
+
+    Returns:
+        包含 'text', 'tables', 'table_count' 的字典
+    """
+    try:
+        text = extract_text_from_pdf(pdf_path)
+    except Exception as e:
+        return {"错误": f"无法读取 PDF: {e}", "text": "", "tables": [], "table_count": 0}
+
+    tables = extract_tables_from_pdf(pdf_path)
+
+    return {
+        "text": text,
+        "tables": tables,
+        "table_count": len(tables),
+    }
+
+
+@mcp.tool()
+def analyze_variant(
+    text: str,
+    cdna: str = "",
+    protein: str = "",
+    gene: str = "",
+    transcript: str = "",
+) -> dict:
+    """
+    从文本（论文文本/摘要）中提取变异信息。
+
+    Args:
+        text: 论文文本或摘要
+        cdna: cDNA 变异，如 "c.2279C>T"
+        protein: 蛋白变异，如 "p.Thr760Met" 或 "Thr760Met"
+        gene: 基因符号，如 "CFTR"
+        transcript: 转录本 ID，如 "NM_000492.4"
+
+    Returns:
+        变异信息字典
+    """
+    if not text:
+        return {"错误": "文本为空"}
 
     # 构建关键词
     keywords = build_variant_keywords(cdna, protein, transcript)
 
     # 查找变异提及句子
-    variant_sentences, matched_kws = find_variant_sentences(result.get("全文", ""), keywords)
+    variant_sentences, matched_kws = find_variant_sentences(text, keywords)
 
-    # 提取各项信息
-    full_text_lower = result.get("全文", "").lower()
+    # 表格为空（文本输入不解析表格）
+    tables = []
 
-    info = {
-        "PMID": pmid,
-        "标题": result.get("标题", ""),
-        "变异提及": bool(variant_sentences),
-        "匹配关键词": matched_kws,
-        "相关句子": variant_sentences[:20],  # 最多返回 20 条
-        "变异类型": infer_variant_type(cdna, protein, variant_sentences),
-        "致病性": extract_pathogenicity(variant_sentences, full_text_lower),
-        "合子状态": extract_zygosity(
-            variant_sentences,
-            full_text_lower,
-            target_cdna=cdna,
-            target_protein=protein,
-            keywords=keywords,
-        ),
-        "遗传模式": extract_inheritance(variant_sentences, full_text_lower),
-        "临床表型": extract_patient_phenotypes(variant_sentences, keywords=keywords),
-        "临床详情": extract_clinical_details(variant_sentences, keywords=keywords),
-    }
+    # 收集表格匹配行（文本输入无表格）
+    table_rows = []
 
-    # 提取共存变异
-    co_variants = extract_co_variants(
-        variant_sentences,
-        target_cdna=cdna,
-        target_protein=protein,
-        variant_keywords=keywords,
+    # 标题从文本提取
+    title = text[:200] if text else ""
+
+    return _build_result_dict(
+        pdf_path="",
+        title=title,
+        gene=gene,
+        cdna=cdna,
+        protein=protein,
+        transcript=transcript,
+        full_text=text,
+        tables=tables,
+        variant_sentences=variant_sentences,
+        matched_kws=matched_kws,
+        table_rows=table_rows,
+        table_count=0,
     )
-    if co_variants:
-        info["共存变异"] = co_variants
-
-    return info
 
 
 @mcp.tool()
@@ -220,76 +293,37 @@ def search_variant_keywords(protein: str = "", cdna: str = "") -> dict:
     }
 
 
-@mcp.tool()
-def batch_extract_variants(
-    pmids: list[str],
-    cdna: str = "",
-    protein: str = "",
-    gene: str = "",
-    transcript: str = "",
-) -> dict:
-    """
-    批量从多个 PubMed 文章中提取变异信息。
-
-    Args:
-        pmids: PubMed ID 列表
-        cdna: cDNA 变异
-        protein: 蛋白变异
-        gene: 基因符号
-        transcript: 转录本 ID
-
-    Returns:
-        包含所有文章结果的字典
-    """
-    results = []
-    for pmid in pmids:
-        pmid = pmid.strip()
-        if not pmid:
-            continue
-        try:
-            info = extract_variant_info(pmid, cdna, protein, gene, transcript)
-            results.append(info)
-        except Exception as e:
-            results.append({"PMID": pmid, "错误": str(e)})
-
-    return {
-        "查询参数": {"pmids": pmids, "cdna": cdna, "protein": protein, "gene": gene},
-        "结果数量": len(results),
-        "结果": results,
-    }
-
-
 # ── 资源 ──────────────────────────────────────────────────────────────────────
 
 
-@mcp.resource("pubmed://pmid/{pmid}")
-def pubmed_article(pmid: str) -> str:
-    """获取指定 PMID 的 PubMed 文章信息（作为文本资源）。"""
-    articles = search_pubmed_by_pmid([pmid])
-    if articles:
-        a = articles[0]
+@mcp.resource("pdf://parse/{pdf_path}")
+def parse_pdf_resource(pdf_path: str) -> str:
+    """解析指定路径的 PDF 文件并返回文本内容。"""
+    try:
+        result = parse_pdf(pdf_path)
+        if "错误" in result:
+            return f"错误: {result['错误']}"
         lines = [
-            f"PMID: {a.get('PMID', '')}",
-            f"标题: {a.get('标题', '')}",
-            f"期刊: {a.get('期刊', '')} ({a.get('发表年份', '')})",
-            f"作者: {', '.join(a.get('作者', [])[:5])}",
+            f"文件: {pdf_path}",
+            f"表格数量: {result['table_count']}",
             "",
-            "摘要:",
-            a.get('摘要', '无摘要'),
+            "文本内容（前 2000 字符）:",
+            result["text"][:2000],
         ]
         return "\n".join(lines)
-    return f"未找到 PMID: {pmid}"
+    except Exception as e:
+        return f"解析失败: {e}"
 
 
 # ── 提示 (Prompts) ────────────────────────────────────────────────────────────
 
 
 @mcp.prompt()
-def analyze_patient_variants(pmid: str, gene: str) -> str:
+def analyze_patient_variants(pdf_path: str, gene: str) -> str:
     """生成分析某基因相关患者变异的提示词。"""
-    return f"""分析以下 PubMed 文章中 {gene} 基因相关患者的变异信息。
+    return f"""分析以下 PDF 文献中 {gene} 基因相关患者的变异信息。
 
-PMID: {pmid}
+文件路径: {pdf_path}
 
 请提取:
 1. 患者的变异类型（cDNA 和蛋白改变）
@@ -297,8 +331,29 @@ PMID: {pmid}
 3. 遗传模式（显性/隐性）
 4. 患者表型（临床特征）
 5. 是否为复合杂合或纯合变异
+6. 相位状态（顺式/反式）
 """
 
 
 if __name__ == "__main__":
+    import sys
+    if "--test" in sys.argv:
+        # 测试模式：不启动 MCP 服务器，只验证导入和简单调用
+        print("Running test mode...")
+        from pubmed_client import (
+            extract_text_from_pdf,
+            extract_tables_from_pdf,
+            build_variant_keywords,
+            find_variant_sentences,
+        )
+        print("pubmed_client import successful")
+
+        # 测试关键词构建
+        keywords = build_variant_keywords("c.2279C>T", "p.Thr760Met")
+        print(f"Keywords built: {list(keywords['all'])[:5]}")
+
+        print("\nTest complete, server not started.")
+        print("To start MCP server, connect via Claude Code MCP configuration.")
+        sys.exit(0)
+
     mcp.run()

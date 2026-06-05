@@ -1,0 +1,76 @@
+/**
+ * cases/extract_zygosity_cases.json
+ *
+ * 用途：记录 extract_zygosity() 函数的测试用例（供人类阅读）。
+ *
+ * 函数签名：
+ *   extract_zygosity(
+ *     sentences, full_text_lower,
+ *     target_cdna="", target_protein="",
+ *     tables=None, keywords=None
+ *   ) -> str
+ *
+ * 返回值类型（中文）：
+ *   复合杂合 (compound heterozygous) | 纯合 (homozygous) | 杂合 (heterozygous)
+ *   双等位基因 (biallelic) | 单等位基因 (monoallelic) | 半合子 (hemizygous)
+ *
+ * 策略说明：
+ *   1. 仅在同时包含目标变异的句子中匹配合子关键词
+ *   2. 句子提到其他变异（不同的 c./p.）→ 降低该句子权重
+ *   3. "in trans" 证据存在时 → 排除纯合，确认为复合杂合
+ *
+ * 如何运行这些用例：
+ *   # 在 test_extractors.py 的 TestExtractZygosityFromCases 类中（目前为 informational）
+ */
+
+[
+  {
+    "description": "明确提到 'compound heterozygous' → 复合杂合",
+    "input": {
+      "sentences": ["The patient had compound heterozygous mutations."],
+      "full_text_lower": "the patient had compound heterozygous mutations.",
+      "target_cdna": "c.2279C>T",
+      "target_protein": "p.Thr760Met"
+    },
+    // 期望结果包含 "compound"（不区分大小写）或中文"复合杂合"
+    "expected_contains": "compound"
+  },
+
+  {
+    "description": "明确提到 'homozygous' → 纯合",
+    "input": {
+      "sentences": ["Homozygous variant was detected."],
+      "full_text_lower": "homozygous variant was detected.",
+      "target_cdna": "",
+      "target_protein": ""
+    },
+    // 期望结果包含 "hom"（不区分大小写）或中文"纯合"
+    "expected_contains": "hom"
+  },
+
+  {
+    "description": "明确提到 'heterozygous' → 杂合",
+    "input": {
+      "sentences": ["Heterozygous for the variant."],
+      "full_text_lower": "heterozygous for the variant.",
+      "target_cdna": "",
+      "target_protein": ""
+    },
+    // 期望结果包含 "het"（不区分大小写）或中文"杂合"
+    "expected_contains": "het"
+  },
+
+  {
+    "description": "句子同时提到 'homozygous' 和 'in trans' → 应修正为复合杂合",
+    "input": {
+      "sentences": [
+        "The variant was homozygous. We could not formally confirm the in trans position."
+      ],
+      "full_text_lower": "the variant was homozygous. we could not formally confirm the in trans position.",
+      "target_cdna": "c.2279C>T",
+      "target_protein": ""
+    },
+    // "in trans" 否定了纯合，应识别为复合杂合
+    "expected_contains": "compound"
+  }
+]

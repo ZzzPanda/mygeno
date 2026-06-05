@@ -1,0 +1,72 @@
+/**
+ * cases/find_variant_sentences_cases.json
+ *
+ * 用途：记录 find_variant_sentences() 函数的测试用例（供人类阅读）。
+ *
+ * 函数签名：
+ *   find_variant_sentences(full_text: str, keywords: dict) -> (list[str], list[str])
+ *   - 返回 (变异相关句子列表, 匹配到的关键词列表)
+ *
+ * 策略说明：
+ *   1. 精确匹配 cDNA 关键词（exact）
+ *   2. 模糊匹配 cDNA 关键词（fuzzy，配合 c. 或 > 等上下文）
+ *   3. 蛋白关键词匹配（protein）
+ *   4. 描述性短语匹配（descriptive patterns）
+ *   5. 历史命名匹配（historical names）
+ *
+ * 如何运行这些用例：
+ *   # 在 test_variants.py 的 TestFindVariantSentencesFromCases 类中（目前为 informational）
+ */
+
+[
+  {
+    "description": "完整 cDNA 形式（c.2279C>T）在句子中 → 精确匹配",
+    "input": {
+      "text": "The patient carried the c.2279C>T variant. Another sentence.",
+      "cdna": "c.2279C>T",
+      "protein": ""
+    },
+    "expected": {
+      // 期望至少找到 1 个包含变异的句子
+      "expected_sentences_min": 1,
+      // 期望匹配的关键词中包含 "c.2279C>T" 或数字 "2279"
+      "expected_keyword_in": "c.2279C>T"
+    }
+  },
+
+  {
+    "description": "蛋白变异 p.Thr760Met 在句子中 → 蛋白匹配",
+    "input": {
+      "text": "The p.Thr760Met variant was found in patient 1.",
+      "cdna": "",
+      "protein": "p.Thr760Met"
+    },
+    "expected": {
+      "expected_sentences_min": 1
+    }
+  },
+
+  {
+    "description": "文本中完全不包含目标变异 → 无匹配句子",
+    "input": {
+      "text": "This is unrelated text about another gene.",
+      "cdna": "c.9999G>A",
+      "protein": ""
+    },
+    "expected": {
+      "expected_sentences_min": 0
+    }
+  },
+
+  {
+    "description": "文本用2279C>T（无 c. 前缀），关键词有 c. 前缀 → 模糊匹配",
+    "input": {
+      "text": "Mutation 2279C>T was detected.",
+      "cdna": "c.2279C>T",
+      "protein": ""
+    },
+    "expected": {
+      "expected_sentences_min": 1
+    }
+  }
+]

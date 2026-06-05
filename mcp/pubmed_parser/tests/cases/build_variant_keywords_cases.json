@@ -1,0 +1,94 @@
+/**
+ * cases/build_variant_keywords_cases.json
+ *
+ * 用途：记录 build_variant_keywords()函数的测试用例（供人类阅读）。
+ * 格式说明：
+ *   - description : 用中文描述这个测试用例验证什么
+ *   - input       : 传给 build_variant_keywords() 的参数
+ *   - expected : 期望的输出字段及其值
+ *
+ * 如何运行这些用例：
+ *   # 在 test_variants.py 的 TestBuildVariantKeywordsFromCases 类中
+ *   # 目前为 informational（仅供阅读），未来可扩展为参数化测试
+ */
+
+[
+  {
+    "description": "仅传入 cDNA → 生成 exact 和 fuzzy 两类关键词",
+    "input": {
+      "cdna": "c.1166G>A",
+      "protein": "",
+      "transcript": ""
+    },
+    "expected": {
+      // exact: 完整 cDNA 形式，精确匹配用
+      "exact": ["c.1166G>A"],
+      // fuzzy: 去掉 c. 前缀、去掉点号等变体，用于模糊匹配
+      "fuzzy": ["1166G>A", "c1166G>A", "1166"]
+    }
+  },
+
+  {
+    "description": "p.Thr760Met（三字母格式）→ 生成多种蛋白关键词变体",
+    "input": {
+      "cdna": "",
+      "protein": "p.Thr760Met",
+      "transcript": ""
+    },
+    "expected": {
+      // 期望 protein 列表中包含这些关键词（任一即可）
+      "protein_contains": ["p.Thr760Met", "Thr760Met", "T760M"]
+    }
+  },
+
+  {
+    "description": "蛋白变异不带 p. 前缀 → 仍能正常匹配",
+    "input": {
+      "cdna": "",
+      "protein": "Thr760Met",
+      "transcript": ""
+    },
+    "expected": {
+      "protein_contains": ["Thr760Met"]
+    }
+  },
+
+  {
+    "description": "三字母 Arg389His → 展开为单字母 R389H",
+    "input": {
+      "cdna": "",
+      "protein": "p.Arg389His",
+      "transcript": ""
+    },
+    "expected": {
+      // 期望 protein 列表中有含 "R389" 的关键词（单字母格式）
+      "protein_contains": ["R389"]
+    }
+  },
+
+  {
+    "description": "无义突变 Ter → 包含 Ter 和 * 两种终止表示",
+    "input": {
+      "cdna": "",
+      "protein": "p.Arg389Ter",
+      "transcript": ""
+    },
+    "expected": {
+      // 期望 protein 列表中有 Ter 或 *（星号表示终止密码子）
+      "protein_contains_any": ["Ter", "*"]
+    }
+  },
+
+  {
+    "description": "移码突变 fs → 包含独立的 fs 关键词",
+    "input": {
+      "cdna": "",
+      "protein": "p.Ala411fs",
+      "transcript": ""
+    },
+    "expected": {
+      // 期望 protein 列表中有 "fs"字符串（独立关键词）
+      "protein_contains": ["fs"]
+    }
+  }
+]

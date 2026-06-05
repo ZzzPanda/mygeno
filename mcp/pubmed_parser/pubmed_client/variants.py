@@ -97,7 +97,7 @@ def expand_protein_keywords(protein_str):
     keywords.add(bare)
 
     # 解析三字母格式: Arg389His / Arg389Ter / Arg382Stop
-    m3 = re.match(r'([A-Z][a-z]{2})(\d+)([A-Z][a-z]{2}|Ter|Stop|\*|X)', bare)
+    m3 = re.match(r'([A-Z][a-z]{2})(\d+)([A-Z][a-z]{2}|Ter|Stop|\*|X|fs)', bare)
     if m3:
         ref3, pos, alt3 = m3.groups()
         ref1 = AA_3TO1.get(ref3, ref3[0])
@@ -111,6 +111,9 @@ def expand_protein_keywords(protein_str):
         keywords.add(f"{ref3}{pos}{alt3}")
         # 带空格: R 389 H
         keywords.add(f"{ref1} {pos} {alt1}")
+        # "fs" (frameshift) standalone keyword
+        if alt3 in ("fs",):
+            keywords.add("fs")
         # 星号/终止密码子变体
         if alt3 in ("Ter", "Stop", "*", "X"):
             keywords.add(f"{ref1}{pos}*")
@@ -295,35 +298,48 @@ def infer_variant_type(cdna, protein, sentences):
     """推断变异类型。"""
     types_found = []
     if cdna:
+        # Check splice site BEFORE substitution (c.858+2T>A matches T>A as missense first)
+        if re.search(r'[-+]\d+', cdna) and '>' in cdna:
+            return "剪接位点突变 (splice site)"
         if re.search(r'[A-ZTCG*]\s*>\s*[A-ZTCG*]', cdna):
-            if protein and re.search(r'(Ter|\*|X\b)', protein):
-                types_found.append("无义突变 (nonsense)")
+            if protein and re.search(r'(?:Ter|\*|X)(?=$|[^*])', protein):
+                return "无义突变 (nonsense)"
             elif protein and "fs" in protein:
-                types_found.append("移码突变 (frameshift)")
+                return "移码突变 (frameshift)"
             elif protein and "Met1" in protein:
-                types_found.append("起始密码子丢失 (start loss)")
+                return "起始密码子丢失 (start loss)"
             else:
-                types_found.append("错义突变 (missense)")
+                return "错义突变 (missense)"
         if re.search(r'del', cdna, re.IGNORECASE):
             if "fs" in (protein or ""):
-                types_found.append("移码突变 (frameshift)")
+                return "移码突变 (frameshift)"
             elif re.search(r'_\d+del', cdna) and '>[A-Z]' not in cdna:
-                types_found.append("缺失 (deletion)")
+                return "缺失 (deletion)"
         if re.search(r'ins', cdna, re.IGNORECASE):
-            types_found.append("插入 (insertion)")
+            return "插入 (insertion)"
         if re.search(r'dup', cdna, re.IGNORECASE) and not re.search(r'del|ins|>', cdna):
-            types_found.append("重复 (duplication)")
-        if re.search(r'[-+]\d+', cdna) and '>' in cdna:
-            types_found.append("剪接位点突变 (splice site)")
+            return "重复 (duplication)"
         if re.search(r'=', cdna):
-            types_found.append("同义突变 (silent)")
+            return "同义突变 (silent)"
+
+    # Protein-only inference (no cDNA provided) — avoid text fallback to prevent
+    # unrelated variants (e.g. p.Phe861Leufs*3) from overriding the target type.
+    if not cdna and protein:
+        if re.search(r'(?:Ter|\*|X)(?=$|[^*])', protein):
+            return "无义突变 (nonsense)"
+        elif "fs" in protein:
+            return "移码突变 (frameshift)"
+        elif "Met1" in protein:
+            return "起始密码子丢失 (start loss)"
+        else:
+            return "错义突变 (missense)"
 
     if not types_found:
         context = " ".join(sentences).lower()
         type_patterns = [
             ("无义突变 (nonsense)", r'nonsense|stop.*(gain|codon)|premature.*stop'),
             ("剪接位点突变 (splice site)", r'splice.*(site|donor|acceptor)|splicing.*defect'),
-            ("移码突变 (frameshift)", r'frameshift|fs\*|fs\.|p\.[A-Z][a-z]{2}\d+fs'),
+            ("移码突变 (frameshift)", r'frameshift|fs\*\d+|p\.[A-Z][a-z]{2}\d+fs\b'),
             ("起始密码子丢失 (start loss)", r'start.*(loss|lost)|initiation.*codon|met1[>\s]'),
             ("同义突变 (silent)", r'silent|synonymous'),
         ]

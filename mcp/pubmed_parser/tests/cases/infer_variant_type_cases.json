@@ -1,0 +1,140 @@
+/**
+ * cases/infer_variant_type_cases.json
+ *
+ * 用途：记录 infer_variant_type() 函数的测试用例（供人类阅读）。
+ *
+ * 函数签名：
+ *   infer_variant_type(cdna: str, protein: str, sentences: list[str]) -> str
+ *
+ * 返回值类型（中文）：
+ *  错义突变 (missense)      | 无义突变 (nonsense)     | 移码突变 (frameshift)
+ *   缺失 (deletion)          | 插入 (insertion)        | 重复 (duplication)
+ *   同义突变 (silent)        | 剪接位点突变 (splice site) | 起始密码子丢失 (start loss)
+ *
+ * 如何运行这些用例：
+ *   # 在 test_variants.py 的 TestInferVariantTypeFromCases 类中（目前为 informational）
+ */
+
+[
+  {
+    "description": "c.2279C>T + p.Thr760Met → 错义突变",
+    "input": {
+      "cdna": "c.2279C>T",
+      "protein": "p.Thr760Met",
+      "sentences": []
+    },
+    "expected": "错义突变 (missense)"
+  },
+
+  {
+    "description": "c.1166G>T + p.Arg389Ter → 无义突变（终止密码子）",
+    "input": {
+      "cdna": "c.1166G>T",
+      "protein": "p.Arg389Ter",
+      "sentences": []
+    },
+    "expected": "无义突变 (nonsense)"
+  },
+
+  {
+    "description": "c.1234del + p.Ala411fs → 移码突变（frameshift）",
+    "input": {
+      "cdna": "c.1234del",
+      "protein": "p.Ala411fs",
+      "sentences": []
+    },
+    "expected": "移码突变 (frameshift)"
+  },
+
+  {
+    "description": "c.1166_1167del + p.Pro392del → 缺失（deletion）",
+    "input": {
+      "cdna": "c.1166_1167del",
+      "protein": "p.Pro392del",
+      "sentences": []
+    },
+    "expected": "缺失 (deletion)"
+  },
+
+  {
+    "description": "c.1234ins（仅有 cDNA，无蛋白）→ 插入",
+    "input": {
+      "cdna": "c.1234ins",
+      "protein": "",
+      "sentences": []
+    },
+    "expected": "插入 (insertion)"
+  },
+
+  {
+    "description": "c.1234dup → 重复",
+    "input": {
+      "cdna": "c.1234dup",
+      "protein": "",
+      "sentences": []
+    },
+    "expected": "重复 (duplication)"
+  },
+
+  {
+    "description": "c.1234C= → 同义突变（无氨基酸改变）",
+    "input": {
+      "cdna": "c.1234C=",
+      "protein": "",
+      "sentences": []
+    },
+    "expected": "同义突变 (silent)"
+  },
+
+  {
+    "description": "c.858+2T>A（含内含子位点）→ 剪接位点突变",
+    "input": {
+      "cdna": "c.858+2T>A",
+      "protein": "",
+      "sentences": []
+    },
+    "expected": "剪接位点突变 (splice site)"
+  },
+
+  {
+    "description": "仅有蛋白 p.Thr760Met（无 cDNA）→ 仍推断为错义突变",
+    "input": {
+      "cdna": "",
+      "protein": "p.Thr760Met",
+      "sentences": []
+    },
+    "expected": "错义突变 (missense)"
+  },
+
+  {
+    "description": "仅有蛋白 p.Arg389Ter（无 cDNA）→ 仍推断为无义突变",
+    "input": {
+      "cdna": "",
+      "protein": "p.Arg389Ter",
+      "sentences": []
+    },
+    "expected": "无义突变 (nonsense)"
+  },
+
+  {
+    "description": "仅有蛋白 p.Ala411fs（无 cDNA）→ 仍推断为移码突变",
+    "input": {
+      "cdna": "",
+      "protein": "p.Ala411fs",
+      "sentences": []
+    },
+    "expected": "移码突变 (frameshift)"
+  },
+
+  {
+    "description": "文本中混入其他变异（p.Phe861Leufs*3）→ 不应错误覆盖目标变异类型",
+    "input": {
+      "cdna": "",
+      "protein": "p.Thr760Met",
+      "sentences": [
+        "p.Phe861Leufs*3 was found in another patient."
+      ]
+    },
+    "expected": "错义突变 (missense)"
+  }
+]

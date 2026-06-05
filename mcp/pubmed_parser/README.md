@@ -1,28 +1,32 @@
 # PubMed Parser MCP Server
 
-基于 [FastMCP](https://github.com/jlowin/fastmcp) 的 PubMed 文献查询和变异信息提取 MCP 服务器。
+基于 [FastMCP](https://github.com/jlowin/fastmcp) 的 PDF 文献解析和变异信息提取 MCP 服务器。
 
 ## 安装
 
 ```bash
 cd /Users/roger/Documents/GitHub/mygeno/mcp/pubmed_parser
 
-# 首次安装：创建虚拟环境并安装依赖
+# 创建虚拟环境并安装依赖
 uv venv .venv
-uv pip install --python .venv/bin/python fastmcp
+uv pip install fastmcp pymupdf pytest
 ```
-
-> 注：本项目使用 `uv` 管理虚拟环境，避免 macOS 系统 Python 的 externally-managed 限制。
 
 ## 运行
 
+### 测试模式（验证安装）
 ```bash
-# 激活虚拟环境
-source .venv/bin/activate
-
-# 运行服务器
-python server.py
+.venv/bin/python server.py --test
 ```
+
+### 启动 MCP 服务器
+MCP 服务器通过 stdio 通信，需要通过 Claude Code MCP 配置连接：
+
+```bash
+.venv/bin/python server.py
+```
+
+直接运行会显示 JSON 解析错误，这是正常现象（没有 MCP 客户端连接）。
 
 ## Claude Code 集成
 
@@ -43,16 +47,52 @@ python server.py
 
 | 工具 | 说明 |
 |------|------|
-| `search_pubmed_by_pmid` | 根据 PMID 获取 PubMed 摘要信息 |
-| `get_fulltext_by_pmid` | 获取文章全文（优先 PMC 开放获取） |
-| `extract_variant_info` | 从文章中提取目标变异信息（致病性、遗传模式、表型等） |
-| `search_variant_keywords` | 生成变异搜索关键词变体 |
-| `batch_extract_variants` | 批量提取多篇文章的变异信息 |
+| `extract_variant_info` | 从 PDF 文件中提取目标变异信息（致病性、遗传模式、表型等） |
+| `parse_pdf` | 解析 PDF 文件，提取文本和表格 |
+| `analyze_variant` | 从文本/摘要中提取变异信息（无需 PDF） |
+| `search_variant_keywords` | 生成变异搜索关键词的所有变体 |
+
+## 使用示例
+
+```python
+# 从 PDF 提取变异信息
+extract_variant_info(
+    pdf_path="/path/to/PMID:33374015.pdf",
+    cdna="c.2279C>T",
+    protein="p.Thr760Met",
+    gene="CFTR",
+    transcript="NM_000492.4"
+)
+
+# 解析 PDF 获取文本和表格
+parse_pdf("/path/to/PMID:33374015.pdf")
+
+# 直接从文本分析变异
+analyze_variant(
+    text="The patient carried the c.1166G>A variant...",
+    cdna="c.1166G>A",
+    protein="p.R389H",
+    gene="GENE"
+)
+```
 
 ## 资源
 
-- `pubmed://pmid/{pmid}` — 获取指定 PMID 的文章信息（文本格式）
+- `pdf://parse/{pdf_path}` — 解析指定路径的 PDF 并返回文本内容
 
 ## 提示 (Prompts)
 
-- `analyze_patient_variants(pmid, gene)` — 生成分析某基因相关患者变异的提示词
+- `analyze_patient_variants(pdf_path, gene)` — 生成分析某基因相关患者变异的提示词
+
+## 运行测试
+
+```bash
+# pytest（所有测试）
+.venv/bin/python -m pytest tests/test_pdf_parser.py -v
+
+# 单个 PDF 测试（调试用）
+.venv/bin/python -m pytest tests/test_pdf_parser.py::TestPDFParser::test_single_pdf -v
+
+# CLI 模式
+.venv/bin/python tests/test_pdf_parser.py --data-dir data/pdf
+```
