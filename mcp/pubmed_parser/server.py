@@ -337,7 +337,40 @@ def analyze_patient_variants(pdf_path: str, gene: str) -> str:
 
 if __name__ == "__main__":
     import sys
-    if "--test" in sys.argv:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="PubMed Parser MCP Server")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "http", "streamable-http", "sse"],
+        default="streamable-http",
+        help="Transport protocol (default: streamable-http)",
+    )
+    parser.add_argument(
+        "--host",
+        default="0.0.0.0",
+        help="HTTP host to bind (default: 0.0.0.0)",
+    )
+    parser.add_argument(
+        "--port", type=int, default=8080,
+        help="HTTP port to bind (default: 8080)",
+    )
+    parser.add_argument(
+        "--path", default="/mcp",
+        help="HTTP endpoint path (default: /mcp)",
+    )
+    parser.add_argument(
+        "--stateless", action="store_true",
+        help="Enable stateless mode (for streamable-http)",
+    )
+    parser.add_argument(
+        "--json-response", action="store_true",
+        help="Use JSON response format instead of SSE",
+    )
+
+    args, remaining = parser.parse_known_args(sys.argv[1:])
+
+    if "--test" in remaining:
         # 测试模式：不启动 MCP 服务器，只验证导入和简单调用
         print("Running test mode...")
         from pubmed_client import (
@@ -356,4 +389,15 @@ if __name__ == "__main__":
         print("To start MCP server, connect via Claude Code MCP configuration.")
         sys.exit(0)
 
-    mcp.run()
+    if args.transport == "stdio":
+        mcp.run()
+    else:
+        import asyncio
+        asyncio.run(mcp.run_http_async(
+            transport=args.transport,
+            host=args.host,
+            port=args.port,
+            path=args.path,
+            stateless_http=args.stateless if args.transport == "streamable-http" else None,
+            json_response=args.json_response if args.transport in ("http", "streamable-http") else None,
+        ))

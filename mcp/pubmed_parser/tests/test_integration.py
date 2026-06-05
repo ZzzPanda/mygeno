@@ -5,9 +5,14 @@ test_integration.py — 端到端集成测试
   - extract_variant_info() → 从 PDF 文件提取目标变异信息
   - analyze_variant() → 从文本（无 PDF）提取目标变异信息
 
+测试数据：
+  - 每个 PDF 的预期输出位于 data/pdf/*.expected.json
+  - conftest.py 提供 expected_33374015 / expected_34426522 fixtures
+
 测试策略：
-  使用真实 PDF 文件，验证从文本提取 → 关键词构建 → 句子查找 →
-  信息提取的完整流程是否正确。
+ 1. 使用真实 PDF 文件，验证从文本提取 → 关键词构建 → 句子查找 →
+     信息提取的完整流程是否正确。
+  2. 对比实际输出与 .expected.json 文件中的字段，打印 diff供人工审核。
 """
 
 import sys
@@ -105,3 +110,73 @@ class TestAnalyzeVariant:
         result = analyze_variant(text, cdna="c.1166G>A", protein="p.Arg389His", gene="GENE")
         assert result["变异提及"] is True
         assert "pathogenic" in result["致病性"].lower()
+
+
+# =============================================================================
+# TestExpectedOutput — 与 .expected.json 对比（informational）
+# =============================================================================
+
+class TestExpectedOutput:
+    """
+    将 extract_variant_info() 的实际输出与 data/pdf/*.expected.json 对比，
+    打印逐字段 diff，供人工审核。
+
+    运行方式（查看打印输出）：
+      .venv/bin/python -m pytest tests/test_integration.py::TestExpectedOutput -v -s
+    """
+
+    def test_33374015_vs_expected(self, pdf_33374015, expected_33374015):
+        """PMID:33374015.pdf 实际输出 vs预期输出"""
+        from server import extract_variant_info
+
+        expected = expected_33374015
+        if expected is None:
+            import pytest
+            pytest.skip("无配对预期文件 PMID:33374015.expected.json")
+
+        result = extract_variant_info(
+            pdf_path=str(pdf_33374015),
+            cdna=expected.get("cDNA变异", ""),
+            protein=expected.get("蛋白变异", ""),
+            gene=expected.get("基因", ""),
+        )
+
+        print("\n" + "=" * 60)
+        print(f"{pdf_33374015.name} — actual vs expected")
+        print("=" * 60)
+        for field, exp_val in expected.items():
+            if exp_val in ("", None):
+                continue
+            act_val = result.get(field)
+            match = "✓" if exp_val == act_val else "✗"
+            print(f"  {match} {field}:")
+            print(f"      expected: {str(exp_val)[:80]}")
+            print(f"      actual:   {str(act_val)[:80]}")
+
+    def test_34426522_vs_expected(self, pdf_34426522, expected_34426522):
+        """PMID:34426522.pdf 实际输出 vs 预期输出"""
+        from server import extract_variant_info
+
+        expected = expected_34426522
+        if expected is None:
+            import pytest
+            pytest.skip("无配对预期文件 PMID:34426522.expected.json")
+
+        result = extract_variant_info(
+            pdf_path=str(pdf_34426522),
+            cdna="",
+            protein="",
+            gene=expected.get("基因", ""),
+        )
+
+        print("\n" + "=" * 60)
+        print(f"{pdf_34426522.name} — actual vs expected")
+        print("=" * 60)
+        for field, exp_val in expected.items():
+            if exp_val in ("", None):
+                continue
+            act_val = result.get(field)
+            match = "✓" if exp_val == act_val else "✗"
+            print(f"  {match} {field}:")
+            print(f"      expected: {str(exp_val)[:80]}")
+            print(f"      actual:   {str(act_val)[:80]}")

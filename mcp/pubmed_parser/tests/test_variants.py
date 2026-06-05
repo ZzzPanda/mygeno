@@ -78,11 +78,11 @@ class TestBuildVariantKeywords:
 
 class TestBuildVariantKeywordsFromCases:
     """
-    ⚠️ informational only — cases/build_variant_keywords_cases.json供人类阅读
-    此类的参数化测试已禁用，原因：JSON case 结构无法1:1 映射到函数签名。
+    ⚠️ informational only — cases/build_variant_keywords_cases.json供人类阅读。
+
+    此类的参数化测试已禁用，原因：JSON case 结构无法 1:1 映射到函数签名。
     如需添加新测试用例，请在上面的 TestBuildVariantKeywords 中添加显式测试方法。
     """
-    pass  # 占位，保留类名以便 grep
 
 
 # =============================================================================
@@ -129,10 +129,10 @@ class TestFindVariantSentences:
 
 class TestFindVariantSentencesFromCases:
     """
-    ⚠️ informational only — cases/find_variant_sentences_cases.json 供人类阅读
+    ⚠️ informational only — cases/find_variant_sentences_cases.json 供人类阅读。
+
     原因同上。
     """
-    pass
 
 
 # =============================================================================
@@ -188,8 +188,8 @@ class TestInferVariantType:
 
 class TestInferVariantTypeFromCases:
     """
-    ⚠️ informational only — cases/infer_variant_type_cases.json 供人类阅读
+    ⚠️ informational only — cases/infer_variant_type_cases.json 供人类阅读。
+
     所有参数化用例已在上面的 TestInferVariantType 中实现。
     如需添加新测试用例，请在上面的类中添加 @pytest.mark.parametrize 装饰的方法。
     """
-    pass

@@ -66,11 +66,11 @@ class TestExtractPathogenicity:
 
 class TestExtractPathogenicityFromCases:
     """
-    ⚠️ informational only — cases/extract_pathogenicity_cases.json 供人类阅读
+    ⚠️ informational only — cases/extract_pathogenicity_cases.json 供人类阅读。
+
     此类的参数化测试已禁用，原因：JSON case 结构无法 1:1 映射到函数签名。
     如需添加新测试用例，请在上面的 TestExtractPathogenicity 中添加显式测试方法。
     """
-    pass
 
 
 # =============================================================================
@@ -128,10 +128,10 @@ class TestExtractZygosity:
 
 class TestExtractZygosityFromCases:
     """
-    ⚠️ informational only — cases/extract_zygosity_cases.json 供人类阅读
+    ⚠️ informational only — cases/extract_zygosity_cases.json 供人类阅读。
+
     原因同上。
     """
-    pass
 
 
 # =============================================================================

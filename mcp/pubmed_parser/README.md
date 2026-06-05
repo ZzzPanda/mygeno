@@ -20,15 +20,42 @@ uv pip install fastmcp pymupdf pytest
 ```
 
 ### 启动 MCP 服务器
-MCP 服务器通过 stdio 通信，需要通过 Claude Code MCP 配置连接：
 
 ```bash
+# 默认 HTTP streamable 模式，监听 8080
 .venv/bin/python server.py
+
+# 指定传输协议和端口
+.venv/bin/python server.py --transport streamable-http --port 9000
+
+# stdio 模式（Claude Code MCP 配置用）
+.venv/bin/python server.py --transport stdio
+
+# SSE 模式
+.venv/bin/python server.py --transport sse --port 8080
+
+# 查看所有选项
+.venv/bin/python server.py --help
 ```
 
-直接运行会显示 JSON 解析错误，这是正常现象（没有 MCP 客户端连接）。
+可用传输协议：
+- `streamable-http`（默认）：流式 HTTP，推荐用于自定义客户端
+- `http`：传统 HTTP + SSE 轮询
+- `sse`：Server-Sent Events
+- `stdio`：标准输入/输出，用于 Claude Code MCP 配置
 
-## Claude Code 集成
+### 命令行参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `--transport` | `streamable-http` | 传输协议 |
+| `--host` | `0.0.0.0` | HTTP 绑定地址 |
+| `--port` | `8080` | HTTP 端口 |
+| `--path` | `/mcp` | HTTP 端点路径 |
+| `--stateless` | False | 启用 stateless 模式（仅 streamable-http） |
+| `--json-response` | False | 使用 JSON 响应格式 |
+
+## Claude Code 集成（stdio 模式）
 
 在 Claude Code 的 MCP 配置中添加：
 
